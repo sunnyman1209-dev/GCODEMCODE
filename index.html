@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CNC/MCT 통합 테스트</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; padding: 15px; background: #f4f7f9; color: #333; -webkit-text-size-adjust: 100%; }
+        .box { max-width: 500px; margin: auto; background: #fff; padding: 25px; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        h2 { color: #007bff; text-align: center; font-size: 1.3rem; margin-top: 0; }
+        .q-card { border-bottom: 1px solid #eee; padding: 15px 0; }
+        .q-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; margin-bottom: 8px; color: #fff; }
+        .tag-cnc { background: #28a745; } .tag-mc { background: #17a2b8; } .tag-m { background: #fd7e14; }
+        .q-text { font-size: 1.05rem; font-weight: bold; margin-bottom: 10px; color: #444; }
+        input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; box-sizing: border-box; text-transform: uppercase; -webkit-appearance: none; margin-top: 5px; }
+        button { width: 100%; padding: 15px; margin-top: 10px; border: none; border-radius: 10px; font-weight: bold; font-size: 1rem; cursor: pointer; transition: 0.2s; }
+        .btn-check { background: #007bff; color: #fff; margin-top: 20px; }
+        .btn-retry { background: #28a745; color: #fff; margin-top: 20px; display: none; }
+        .ans-view { color: #d93025; font-weight: bold; margin-top: 8px; display: none; padding: 8px; background: #fff2f1; border-radius: 5px; }
+        #lock-screen, #pass-screen { display: none; text-align: center; padding: 40px 20px; }
+        #timer { font-size: 2.5rem; color: #d93025; font-weight: bold; margin: 20px 0; }
+        .pass-msg { color: #28a745; font-size: 1.5rem; font-weight: bold; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <div id="main-content" class="box">
+        <h2>💻 코드 암기 테스트</h2>
+        <p style="font-size: 0.85rem; color: #666; text-align: center;">기능을 보고 코드를 입력하세요.</p>
+        <div id="quiz-area"></div>
+        <button class="btn-check" id="checkBtn">정답 제출</button>
+        <button class="btn-retry" id="retryBtn" onclick="location.reload()">새로운 문제로 다시 도전</button>
+    </div>
+
+    <div id="pass-screen" class="box">
+        <div class="pass-msg">🎉 합격 (PASS)</div>
+        <p id="pass-score" style="font-size: 1.2rem; font-weight: bold;"></p>
+        <p>모든 코드를 완벽하게 마스터하셨네요!<br>아래에서 틀린 문제를 확인해보세요.</p>
+        <button onclick="hidePassScreen()" style="background:#007bff; color:#fff;">내 답안 확인하기</button>
+    </div>
+
+    <div id="lock-screen" class="box">
+        <h2 style="color:#d93025">❌ 불합격 (FAIL)</h2>
+        <p>복습이 더 필요합니다.<br>10분 뒤에 다시 응시하세요.</p>
+        <div id="timer">10:00</div>
+        <button id="reattemptBtn" onclick="location.reload()" style="background:#ccc; color:#888;" disabled>재응시</button>
+    </div>
+
+    <script>
+        const fullDb = [
+            // CNC선반 (PPT "G코드 M코드 개억지 암기 전략" 기준)
+            {t:"CNC선반", c:"G00", f:"위치결정(급속 이송)", g:"cnc"}, {t:"CNC선반", c:"G01", f:"직선보간(절삭 이송)", g:"cnc"},
+            {t:"CNC선반", c:"G02", f:"원호보간(CW : 시계방향)", g:"cnc"}, {t:"CNC선반", c:"G03", f:"원호보간(CCW : 반시계방향)", g:"cnc"},
+            {t:"CNC선반", c:"G04", f:"휴지(Dwell)", g:"cnc"}, {t:"CNC선반", c:"G20", f:"인치(Inch) 단위 지정", g:"cnc"},
+            {t:"CNC선반", c:"G21", f:"미터(Metric, mm) 단위 지정", g:"cnc"}, {t:"CNC선반", c:"G27", f:"원점복귀 확인", g:"cnc"},
+            {t:"CNC선반", c:"G28", f:"자동 원점 복귀", g:"cnc"}, {t:"CNC선반", c:"G40", f:"공구 인선 반지름 보정 취소", g:"cnc"},
+            {t:"CNC선반", c:"G41", f:"공구 인선 반지름 보정 좌측", g:"cnc"}, {t:"CNC선반", c:"G42", f:"공구 인선 반지름 보정 우측", g:"cnc"},
+            {t:"CNC선반", c:"G50", f:"공작물 좌표계 설정 / 주축 최고 회전수", g:"cnc"}, {t:"CNC선반", c:"G70", f:"다듬(정삭) 절삭 사이클", g:"cnc"},
+            {t:"CNC선반", c:"G71", f:"안·바깥지름 거친(황삭) 절삭 사이클", g:"cnc"}, {t:"CNC선반", c:"G96", f:"절삭속도(m/min) 일정제어", g:"cnc"},
+            {t:"CNC선반", c:"G97", f:"주축 회전수(rpm) 일정제어", g:"cnc"}, {t:"CNC선반", c:"G98", f:"분당 이송 지정(mm/min)", g:"cnc"},
+            {t:"CNC선반", c:"G99", f:"회전당 이송 지정(mm/rev)", g:"cnc"},
+            // MCT (PPT "머시닝 센터" 파트 기준)
+            {t:"MCT", c:"G00", f:"급속 위치결정", g:"mc"}, {t:"MCT", c:"G01", f:"직선보간(절삭)", g:"mc"},
+            {t:"MCT", c:"G02", f:"원호보간(시계방향)", g:"mc"}, {t:"MCT", c:"G03", f:"원호보간(반시계방향)", g:"mc"},
+            {t:"MCT", c:"G04", f:"휴지(Dwell)", g:"mc"}, {t:"MCT", c:"G17", f:"XY 평면 지정", g:"mc"},
+            {t:"MCT", c:"G18", f:"ZX 평면 지정", g:"mc"}, {t:"MCT", c:"G19", f:"YZ 평면 지정", g:"mc"},
+            {t:"MCT", c:"G40", f:"공구경 보정 취소", g:"mc"}, {t:"MCT", c:"G41", f:"공구경 보정 좌측", g:"mc"},
+            {t:"MCT", c:"G42", f:"공구경 보정 우측", g:"mc"}, {t:"MCT", c:"G43", f:"공구길이 보정 +", g:"mc"},
+            {t:"MCT", c:"G44", f:"공구길이 보정 -", g:"mc"}, {t:"MCT", c:"G49", f:"공구길이 보정 취소", g:"mc"},
+            {t:"MCT", c:"G54", f:"공작물 좌표계 1번 선택", g:"mc"}, {t:"MCT", c:"G90", f:"절대지령", g:"mc"},
+            {t:"MCT", c:"G91", f:"증분지령", g:"mc"}, {t:"MCT", c:"G96", f:"주축 속도 일정제어", g:"mc"},
+            {t:"MCT", c:"G97", f:"주축 회전수 일정제어", g:"mc"},
+            // M코드 (PPT "M 코드" 파트 기준)
+            {t:"M-코드", c:"M00", f:"프로그램 정지", g:"m"}, {t:"M-코드", c:"M01", f:"선택 프로그램 정지(조건부)", g:"m"},
+            {t:"M-코드", c:"M02", f:"프로그램 끝", g:"m"}, {t:"M-코드", c:"M03", f:"주축 정회전", g:"m"},
+            {t:"M-코드", c:"M04", f:"주축 역회전", g:"m"}, {t:"M-코드", c:"M05", f:"주축 정지", g:"m"},
+            {t:"M-코드", c:"M06", f:"공구 교환", g:"m"}, {t:"M-코드", c:"M08", f:"절삭유 ON", g:"m"},
+            {t:"M-코드", c:"M09", f:"절삭유 OFF", g:"m"}, {t:"M-코드", c:"M30", f:"프로그램 종료 후 선두 복귀(리와인드)", g:"m"},
+            {t:"M-코드", c:"M98", f:"보조프로그램 호출", g:"m"}, {t:"M-코드", c:"M99", f:"보조프로그램 종료", g:"m"}
+        ];
+
+        let selected = [];
+
+        function startTimer(seconds) {
+            const timerDisplay = document.getElementById('timer');
+            const reattemptBtn = document.getElementById('reattemptBtn');
+            const interval = setInterval(() => {
+                const mins = Math.floor(seconds / 60);
+                const secs = seconds % 60;
+                timerDisplay.innerText = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+                if (--seconds < 0) {
+                    clearInterval(interval);
+                    localStorage.removeItem('cnc_final_lock');
+                    timerDisplay.innerText = '00:00';
+                    reattemptBtn.disabled = false;
+                    reattemptBtn.style.background = '#28a745';
+                    reattemptBtn.style.color = '#fff';
+                }
+            }, 1000);
+        }
+
+        function hidePassScreen() {
+            document.getElementById('pass-screen').style.display = 'none';
+            document.getElementById('main-content').style.display = 'block';
+            document.getElementById('checkBtn').style.display = 'none';
+            document.getElementById('retryBtn').style.display = 'block';
+        }
+
+        window.onload = function() {
+            const unlockTime = localStorage.getItem('cnc_final_lock');
+            if (unlockTime && Date.now() < parseInt(unlockTime)) {
+                document.getElementById('main-content').style.display = 'none';
+                document.getElementById('lock-screen').style.display = 'block';
+                startTimer(Math.ceil((parseInt(unlockTime) - Date.now()) / 1000));
+                return;
+            }
+
+            selected = fullDb.sort(() => Math.random() - 0.5).slice(0, 10);
+            let html = "";
+            selected.forEach((item, i) => {
+                html += `<div class="q-card">
+                            <span class="q-tag tag-${item.g}">${item.t}</span>
+                            <div class="q-text">${item.f}</div>
+                            <input type="text" class="userInput" autocomplete="off" inputmode="text" placeholder="">
+                            <div class="ans-view" id="ans-${i}">정답: ${item.c}</div>
+                        </div>`;
+            });
+            document.getElementById("quiz-area").innerHTML = html;
+
+            document.getElementById('checkBtn').onclick = function() {
+                const inputs = document.querySelectorAll(".userInput");
+                const views = document.querySelectorAll(".ans-view");
+                let score = 0;
+                inputs.forEach((input, i) => {
+                    if (input.value.trim().toUpperCase() === selected[i].c.toUpperCase()) {
+                        score++;
+                    } else {
+                        views[i].style.display = "block";
+                    }
+                    input.disabled = true; // 제출 후 수정 불가
+                });
+
+                if (score < 8) {
+                    localStorage.setItem('cnc_final_lock', (Date.now() + (10 * 60 * 1000)).toString());
+                    alert(`점수: ${score}/10점. 불합격! 10분간 차단됩니다.`);
+                    location.reload();
+                } else {
+                    document.getElementById('main-content').style.display = 'none';
+                    document.getElementById('pass-screen').style.display = 'block';
+                    document.getElementById('pass-score').innerText = `최종 점수: ${score} / 10`;
+                }
+            };
+        };
+    </script>
+</body>
+</html>
