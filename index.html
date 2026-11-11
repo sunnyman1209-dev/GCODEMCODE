@@ -28,6 +28,9 @@
         #lock-screen, #pass-screen { text-align: center; padding: 40px 20px; }
         #timer { font-size: 2.5rem; color: #d93025; font-weight: bold; margin: 20px 0; }
         .pass-msg { color: #28a745; font-size: 1.5rem; font-weight: bold; margin-bottom: 10px; }
+        .browser { text-align: center; font-size: 0.95rem; font-weight: bold; color: #333; background: #eef3ff; border-radius: 8px; padding: 8px; margin: 10px 0; }
+        .open-chrome { display: block; text-align: center; background: #007bff; color: #fff; padding: 15px; border-radius: 10px; font-weight: bold; text-decoration: none; margin-top: 15px; }
+        .addr { display: block; text-align: center; font-size: 0.95rem; word-break: break-all; background: #f6f6f6; padding: 10px; border-radius: 8px; margin-top: 10px; user-select: all; }
         .fail-score { text-align: center; font-size: 1.2rem; font-weight: bold; color: #d93025; margin: 6px 0 4px; }
     </style>
 </head>
@@ -43,6 +46,7 @@
     <div id="pass-screen" class="box">
         <div class="pass-msg">합격 (PASS)</div>
         <p id="pass-score" style="font-size: 1.2rem; font-weight: bold;"></p>
+        <p class="browser" id="pass-browser"></p>
         <p>잘했습니다!<br><span id="pass-detail"></span></p>
         <button onclick="hidePassScreen()" style="background:#007bff; color:#fff;">내 답안 확인하기</button>
     </div>
@@ -50,6 +54,7 @@
     <div id="review-screen" class="box">
         <h2 style="color:#d93025">불합격 (FAIL)</h2>
         <p class="fail-score" id="fail-score"></p>
+        <p class="browser" id="fail-browser"></p>
         <p class="guide">틀린 문제의 정답을 칸에 그대로 적으세요.<br>모두 바르게 적은 시점부터 <b>5분</b> 뒤에 다시 응시할 수 있습니다.</p>
         <div id="review-area"></div>
         <button class="btn-fix" id="fixBtn" disabled>정답 입력 완료</button>
@@ -117,6 +122,39 @@
         }
         function store(key, val) { try { val === null ? localStorage.removeItem(key) : localStorage.setItem(key, val); } catch (e) {} }
         function load(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+        // 접속한 브라우저 판별. 삼성 인터넷·웨일·엣지와 앱 안 브라우저도 이름에 Chrome이 들어가므로 먼저 거른다.
+        function browserInfo() {
+            const u = navigator.userAgent;
+            const os = /iPhone|iPad|iPod/.test(u) ? 'iOS' : /Android/.test(u) ? 'Android' : /Windows/.test(u) ? 'Windows' : /Mac OS X/.test(u) ? 'Mac' : '';
+            const list = [
+                [/KAKAOTALK/i, '카카오톡 앱 안 브라우저'], [/NAVER/, '네이버 앱'], [/Instagram|FBAN|FBAV|Line\//, '앱 안 브라우저'],
+                [/SamsungBrowser/, '삼성 인터넷'], [/Whale/, '웨일'], [/Edg(A|iOS)?\//, '엣지'], [/OPR\/|Opera/, '오페라'],
+                [/FxiOS|Firefox/, '파이어폭스'], [/; wv\)/, '앱 안 브라우저']
+            ];
+            for (const [re, name] of list) if (re.test(u)) return {name, os, isChrome: false};
+            if (navigator.brave) return {name: '브레이브', os, isChrome: false};
+            if (/CriOS/.test(u) || (/Chrome\//.test(u) && navigator.vendor === 'Google Inc.')) return {name: '크롬', os, isChrome: true};
+            if (/Safari/.test(u)) return {name: '사파리', os, isChrome: false};
+            return {name: '알 수 없는 브라우저', os, isChrome: false};
+        }
+        const BROWSER = browserInfo();
+        const BROWSER_TEXT = `응시 브라우저: ${BROWSER.name}${BROWSER.os ? ' (' + BROWSER.os + ')' : ''}`;
+
+        // 크롬이 아니면 응시를 막고 크롬으로 여는 길을 안내한다
+        function showChromeOnly() {
+            const url = location.href.split('#')[0];
+            const noProto = url.replace(/^https?:\/\//, '');
+            let openBtn = '';
+            if (BROWSER.os === 'Android') openBtn = `<a class="open-chrome" href="intent://${esc(noProto)}#Intent;scheme=https;package=com.android.chrome;end">크롬으로 열기</a>`;
+            else if (BROWSER.os === 'iOS') openBtn = `<a class="open-chrome" href="googlechromes://${esc(noProto)}">크롬으로 열기</a>`;
+            document.getElementById('main-content').innerHTML =
+                `<h2>코드 암기 테스트</h2>
+                 <p class="browser">${esc(BROWSER_TEXT)}</p>
+                 <p class="guide">이 시험은 <b>크롬</b>에서만 응시할 수 있습니다.<br>아래 단추가 안 되면 크롬 앱을 열고 주소창에 이 주소를 입력하세요.</p>
+                 ${openBtn}
+                 <span class="addr">${esc(url)}</span>`;
+        }
+
         function canUseStorage() {
             const probe = '__gm_probe__';
             try {
@@ -159,6 +197,7 @@
         function showReview(review) {
             show('review-screen');
             document.getElementById('fail-score').innerText = `점수: ${review.score}점 (합격 ${PASS}점)`;
+            document.getElementById('fail-browser').innerText = BROWSER_TEXT;
             let html = "";
             review.wrong.forEach((item, i) => {
                 html += `<div class="q-card">
@@ -206,6 +245,8 @@
             window.addEventListener('storage', (e) => {
                 if (e.key === REVIEW_KEY || e.key === LOCK_KEY) location.reload();
             });
+
+            if (!BROWSER.isChrome) { showChromeOnly(); return; }
 
             if (!canUseStorage()) {
                 document.getElementById('main-content').innerHTML =
@@ -272,6 +313,7 @@
                 } else {
                     show('pass-screen');
                     document.getElementById('pass-score').innerText = `최종 점수: ${score}점`;
+                    document.getElementById('pass-browser').innerText = BROWSER_TEXT;
                     document.getElementById('pass-detail').innerText =
                         wrong.length === 0 ? '모두 맞혔습니다.' : '아래에서 틀린 문제를 확인해 보세요.';
                 }
