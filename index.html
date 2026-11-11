@@ -103,7 +103,7 @@
         ].map(([k, c, f]) => ({t: k.t, g: k.g, c, f}));
 
         const Q_COUNT = 10, PASS = 90, LOCK_MIN = 5;
-        const LOCK_KEY = 'gm_lock_v2', REVIEW_KEY = 'gm_review_v2';
+        const LOCK_KEY = 'gm_lock_v2', REVIEW_KEY = 'gm_review_v2', QUIZ_KEY = 'gm_quiz_v2';
         let selected = [];
 
         // G1 = G01, g01 = G01 처럼 앞자리 0과 대소문자는 따지지 않는다. 내부 공백은 허용하지 않는다(G 01 = 오답).
@@ -221,7 +221,16 @@
             const unlockTime = parseInt(load(LOCK_KEY));
             if (unlockTime && Date.now() < unlockTime) { showLock(unlockTime); return; }
 
-            selected = shuffle(fullDb.slice()).slice(0, Q_COUNT);
+            // 제출 전 새로고침으로 문제를 바꾸지 못하게, 뽑은 문제를 제출할 때까지 유지
+            selected = null;
+            try {
+                const saved = JSON.parse(load(QUIZ_KEY));
+                if (Array.isArray(saved) && saved.length === Q_COUNT && saved.every(q => q && q.c && q.f && q.t && q.g)) selected = saved;
+            } catch (e) {}
+            if (!selected) {
+                selected = shuffle(fullDb.slice()).slice(0, Q_COUNT);
+                store(QUIZ_KEY, JSON.stringify(selected));
+            }
             let html = "";
             selected.forEach((item, i) => {
                 html += `<div class="q-card">
@@ -253,6 +262,7 @@
                     input.disabled = true; // 제출 후 수정 불가
                 });
                 const score = Math.round(right * 100 / Q_COUNT);
+                store(QUIZ_KEY, null); // 제출했으므로 다음 응시 때는 새 문제
 
                 if (score < PASS) {
                     const review = {score, wrong};
