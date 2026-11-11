@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CNC/MCT 통합 테스트</title>
     <style>
         body { font-family: -apple-system, sans-serif; padding: 15px; background: #f4f7f9; color: #333; -webkit-text-size-adjust: 100%; }
@@ -43,16 +43,16 @@
     <div id="pass-screen" class="box">
         <div class="pass-msg">합격 (PASS)</div>
         <p id="pass-score" style="font-size: 1.2rem; font-weight: bold;"></p>
-        <p>잘했습니다!<br>아래에서 틀린 문제를 확인해 보세요.</p>
+        <p>잘했습니다!<br><span id="pass-detail"></span></p>
         <button onclick="hidePassScreen()" style="background:#007bff; color:#fff;">내 답안 확인하기</button>
     </div>
 
     <div id="review-screen" class="box">
         <h2 style="color:#d93025">불합격 (FAIL)</h2>
         <p class="fail-score" id="fail-score"></p>
-        <p class="guide">틀린 문제의 정답을 칸에 그대로 적으세요.<br>모두 바르게 적으면 그때부터 <b>5분</b> 뒤에 다시 응시할 수 있습니다.</p>
+        <p class="guide">틀린 문제의 정답을 칸에 그대로 적으세요.<br>모두 바르게 적은 시점부터 <b>5분</b> 뒤에 다시 응시할 수 있습니다.</p>
         <div id="review-area"></div>
-        <button class="btn-fix" id="fixBtn" disabled>정답 다 적었음</button>
+        <button class="btn-fix" id="fixBtn" disabled>정답 입력 완료</button>
     </div>
 
     <div id="lock-screen" class="box">
@@ -71,8 +71,9 @@
             [COM,"G00","급속 위치 결정(급속 이송)"], [COM,"G01","직선 보간(절삭 이송)"],
             [COM,"G02","원호 보간(시계 방향, CW)"], [COM,"G03","원호 보간(반시계 방향, CCW)"],
             [COM,"G04","휴지(Dwell, 일시 정지)"], [COM,"G20","인치(inch) 단위 입력"],
-            [COM,"G21","미터(mm) 단위 입력"], [COM,"G27","원점 복귀 확인"],
+            [COM,"G21","미터법(mm) 단위 입력"], [COM,"G27","원점 복귀 확인"],
             [COM,"G28","자동 원점(기계 원점) 복귀"], [COM,"G30","제2·3·4 원점 복귀"],
+            [COM,"G17","X-Y 평면 지정"], [COM,"G18","Z-X 평면 지정"], [COM,"G19","Y-Z 평면 지정"],
             // CNC 선반
             [CNC,"G32","나사 절삭(한 블록씩 지령)"], [CNC,"G40","공구 인선 반지름 보정 취소"],
             [CNC,"G41","공구 인선 반지름 보정 좌측"], [CNC,"G42","공구 인선 반지름 보정 우측"],
@@ -85,7 +86,6 @@
             [CNC,"G97","주축 회전수(rpm) 일정 제어"], [CNC,"G98","분당 이송 지정(mm/min)"],
             [CNC,"G99","회전당 이송 지정(mm/rev)"],
             // 머시닝센터
-            [MCT,"G17","X-Y 평면 지정"], [MCT,"G18","Z-X 평면 지정"], [MCT,"G19","Y-Z 평면 지정"],
             [MCT,"G40","공구 지름 보정 취소"], [MCT,"G41","공구 지름 보정 좌측"], [MCT,"G42","공구 지름 보정 우측"],
             [MCT,"G43","공구 길이 보정 + 방향"], [MCT,"G44","공구 길이 보정 - 방향"], [MCT,"G49","공구 길이 보정 취소"],
             [MCT,"G54","공작물 좌표계 1번 선택"], [MCT,"G73","고속 심공(펙) 드릴링 사이클"], [MCT,"G74","역태핑 사이클(왼나사)"],
@@ -97,8 +97,8 @@
             // M코드
             [MC,"M00","프로그램 정지"], [MC,"M01","선택적 프로그램 정지(옵셔널 스톱)"], [MC,"M02","프로그램 끝"],
             [MC,"M03","주축 정회전(CW)"], [MC,"M04","주축 역회전(CCW)"], [MC,"M05","주축 정지"],
-            [MC,"M06","공구 교환"], [MC,"M08","절삭유 ON"], [MC,"M09","절삭유 OFF"],
-            [MC,"M19","주축 한 방향 정지(오리엔테이션)"], [MC,"M30","프로그램 끝 후 처음으로 되감기(리와인드)"],
+            [MC,"M06","공구 교환(머시닝센터)"], [MC,"M08","절삭유 ON"], [MC,"M09","절삭유 OFF"],
+            [MC,"M19","주축 정위치 정지(오리엔테이션)"], [MC,"M30","프로그램 끝 후 처음으로 되감기(리와인드)"],
             [MC,"M98","보조 프로그램 호출"], [MC,"M99","보조 프로그램 끝(주 프로그램으로 복귀)"]
         ].map(([k, c, f]) => ({t: k.t, g: k.g, c, f}));
 
@@ -106,9 +106,9 @@
         const LOCK_KEY = 'gm_lock_v2', REVIEW_KEY = 'gm_review_v2';
         let selected = [];
 
-        // G1 = G01, g01 = G01 처럼 앞자리 0과 대소문자는 따지지 않는다
+        // G1 = G01, g01 = G01 처럼 앞자리 0과 대소문자는 따지지 않는다. 내부 공백은 허용하지 않는다(G 01 = 오답).
         function norm(s) {
-            const m = String(s).trim().toUpperCase().replace(/\s+/g, '').match(/^([GM])0*(\d+)$/);
+            const m = String(s).trim().toUpperCase().match(/^([GM])0*(\d+)$/);
             return m ? m[1] + Number(m[2]) : '#' + s;
         }
         function esc(s) { return String(s).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
@@ -117,28 +117,42 @@
         }
         function store(key, val) { try { val === null ? localStorage.removeItem(key) : localStorage.setItem(key, val); } catch (e) {} }
         function load(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+        function canUseStorage() {
+            const probe = '__gm_probe__';
+            try {
+                localStorage.setItem(probe, '1');
+                const ok = localStorage.getItem(probe) === '1';
+                localStorage.removeItem(probe);
+                return ok;
+            } catch (e) { return false; }
+        }
 
-        function startTimer(seconds) {
+        function startTimer(unlockAt) {
             const timerDisplay = document.getElementById('timer');
             const reattemptBtn = document.getElementById('reattemptBtn');
+            let interval = null;
             const tick = () => {
-                const s = Math.max(0, seconds);
+                const s = Math.max(0, Math.ceil((unlockAt - Date.now()) / 1000));
                 timerDisplay.innerText = `${Math.floor(s / 60)}:${s % 60 < 10 ? '0' : ''}${s % 60}`;
-                if (--seconds < 0) {
-                    clearInterval(interval);
+                if (s <= 0) {
+                    if (interval) clearInterval(interval);
+                    interval = null;
                     store(LOCK_KEY, null);
                     reattemptBtn.disabled = false;
                     reattemptBtn.style.background = '#28a745';
                     reattemptBtn.style.color = '#fff';
                 }
             };
-            const interval = setInterval(tick, 1000);
+            interval = setInterval(tick, 1000);
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') tick();
+            });
             tick();
         }
 
         function showLock(unlockAt) {
             show('lock-screen');
-            startTimer(Math.ceil((unlockAt - Date.now()) / 1000));
+            startTimer(unlockAt);
         }
 
         // 불합격: 틀린 문제의 정답을 모두 바르게 적어야 5분 차단이 시작된다
@@ -189,6 +203,16 @@
         }
 
         window.onload = function() {
+            window.addEventListener('storage', (e) => {
+                if (e.key === REVIEW_KEY || e.key === LOCK_KEY) location.reload();
+            });
+
+            if (!canUseStorage()) {
+                document.getElementById('main-content').innerHTML =
+                    '<h2>코드 암기 테스트</h2><p class="guide">이 브라우저 설정(사생활 보호 모드 등)에서는 응시할 수 없습니다.<br>일반 모드의 브라우저로 다시 여세요.</p>';
+                return;
+            }
+
             // 정답 적기를 끝내지 않고 새로고침하면 다시 정답 적기 화면으로
             const pending = load(REVIEW_KEY);
             if (pending) {
@@ -210,6 +234,11 @@
             document.getElementById("quiz-area").innerHTML = html;
 
             document.getElementById('checkBtn').onclick = function() {
+                // 다른 탭에서 복습/차단 상태가 생겼으면 채점하지 않고 갱신
+                if (load(REVIEW_KEY) || (parseInt(load(LOCK_KEY)) && Date.now() < parseInt(load(LOCK_KEY)))) {
+                    location.reload();
+                    return;
+                }
                 const inputs = document.querySelectorAll(".userInput");
                 const views = document.querySelectorAll(".ans-view");
                 let right = 0;
@@ -233,6 +262,8 @@
                 } else {
                     show('pass-screen');
                     document.getElementById('pass-score').innerText = `최종 점수: ${score}점`;
+                    document.getElementById('pass-detail').innerText =
+                        wrong.length === 0 ? '모두 맞혔습니다.' : '아래에서 틀린 문제를 확인해 보세요.';
                 }
             };
         };
