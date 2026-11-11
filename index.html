@@ -8,24 +8,33 @@
         body { font-family: -apple-system, sans-serif; padding: 15px; background: #f4f7f9; color: #333; -webkit-text-size-adjust: 100%; }
         .box { max-width: 500px; margin: auto; background: #fff; padding: 25px; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
         h2 { color: #007bff; text-align: center; font-size: 1.3rem; margin-top: 0; }
+        .guide { font-size: 0.85rem; color: #666; text-align: center; line-height: 1.5; }
         .q-card { border-bottom: 1px solid #eee; padding: 15px 0; }
         .q-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; margin-bottom: 8px; color: #fff; }
-        .tag-cnc { background: #28a745; } .tag-mc { background: #17a2b8; } .tag-m { background: #fd7e14; }
+        .tag-cnc { background: #28a745; } .tag-mc { background: #17a2b8; } .tag-cm { background: #6f42c1; } .tag-m { background: #fd7e14; }
         .q-text { font-size: 1.05rem; font-weight: bold; margin-bottom: 10px; color: #444; }
+        .q-text .num { color: #999; margin-right: 4px; }
         input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; box-sizing: border-box; text-transform: uppercase; -webkit-appearance: none; margin-top: 5px; }
+        input:disabled { background: #f6f6f6; color: #888; }
+        input.ok { border-color: #28a745; background: #effaf2; }
         button { width: 100%; padding: 15px; margin-top: 10px; border: none; border-radius: 10px; font-weight: bold; font-size: 1rem; cursor: pointer; transition: 0.2s; }
+        button:disabled { background: #ccc !important; color: #888 !important; cursor: default; }
         .btn-check { background: #007bff; color: #fff; margin-top: 20px; }
         .btn-retry { background: #28a745; color: #fff; margin-top: 20px; display: none; }
+        .btn-fix { background: #d93025; color: #fff; margin-top: 20px; }
         .ans-view { color: #d93025; font-weight: bold; margin-top: 8px; display: none; padding: 8px; background: #fff2f1; border-radius: 5px; }
-        #lock-screen, #pass-screen { display: none; text-align: center; padding: 40px 20px; }
+        .mine { color: #888; font-weight: normal; font-size: 0.9rem; }
+        #lock-screen, #pass-screen, #review-screen { display: none; }
+        #lock-screen, #pass-screen { text-align: center; padding: 40px 20px; }
         #timer { font-size: 2.5rem; color: #d93025; font-weight: bold; margin: 20px 0; }
         .pass-msg { color: #28a745; font-size: 1.5rem; font-weight: bold; margin-bottom: 10px; }
+        .fail-score { text-align: center; font-size: 1.2rem; font-weight: bold; color: #d93025; margin: 6px 0 4px; }
     </style>
 </head>
 <body>
     <div id="main-content" class="box">
         <h2>💻 코드 암기 테스트</h2>
-        <p style="font-size: 0.85rem; color: #666; text-align: center;">기능을 보고 코드를 입력하세요.</p>
+        <p class="guide">기능을 보고 코드를 입력하세요. (예: G01, M03)<br>10문제 · 1문제 10점 · <b>90점 이상 합격</b></p>
         <div id="quiz-area"></div>
         <button class="btn-check" id="checkBtn">정답 제출</button>
         <button class="btn-retry" id="retryBtn" onclick="location.reload()">새로운 문제로 다시 도전</button>
@@ -34,94 +43,168 @@
     <div id="pass-screen" class="box">
         <div class="pass-msg">🎉 합격 (PASS)</div>
         <p id="pass-score" style="font-size: 1.2rem; font-weight: bold;"></p>
-        <p>모든 코드를 완벽하게 마스터하셨네요!<br>아래에서 틀린 문제를 확인해보세요.</p>
+        <p>잘했습니다!<br>아래에서 틀린 문제를 확인해 보세요.</p>
         <button onclick="hidePassScreen()" style="background:#007bff; color:#fff;">내 답안 확인하기</button>
     </div>
 
-    <div id="lock-screen" class="box">
+    <div id="review-screen" class="box">
         <h2 style="color:#d93025">❌ 불합격 (FAIL)</h2>
-        <p>복습이 더 필요합니다.<br>10분 뒤에 다시 응시하세요.</p>
-        <div id="timer">10:00</div>
-        <button id="reattemptBtn" onclick="location.reload()" style="background:#ccc; color:#888;" disabled>재응시</button>
+        <p class="fail-score" id="fail-score"></p>
+        <p class="guide">틀린 문제의 정답을 칸에 그대로 적으세요.<br>모두 바르게 적으면 그때부터 <b>5분</b> 뒤에 다시 응시할 수 있습니다.</p>
+        <div id="review-area"></div>
+        <button class="btn-fix" id="fixBtn" disabled>정답 다 적었음</button>
+    </div>
+
+    <div id="lock-screen" class="box">
+        <h2 style="color:#d93025">⏳ 복습 시간</h2>
+        <p>정답을 모두 적었습니다.<br>5분 뒤에 다시 응시하세요.</p>
+        <div id="timer">5:00</div>
+        <button id="reattemptBtn" onclick="location.reload()" disabled>재응시</button>
     </div>
 
     <script>
+        // 컴퓨터응용가공산업기사 2027 교재 15~17쪽 + 26차시 코드 카드 기준 (FANUC 계열, 선반 G코드 체계 A)
+        // t: 표시 분류, g: 꼬리표 색, c: 정답 코드, f: 문제(기능)
+        const CNC = {t:"CNC선반", g:"cnc"}, MCT = {t:"MCT", g:"mc"}, COM = {t:"공통", g:"cm"}, MC = {t:"M-코드", g:"m"};
         const fullDb = [
-            // CNC선반 (PPT "G코드 M코드 개억지 암기 전략" 기준)
-            {t:"CNC선반", c:"G00", f:"위치결정(급속 이송)", g:"cnc"}, {t:"CNC선반", c:"G01", f:"직선보간(절삭 이송)", g:"cnc"},
-            {t:"CNC선반", c:"G02", f:"원호보간(CW : 시계방향)", g:"cnc"}, {t:"CNC선반", c:"G03", f:"원호보간(CCW : 반시계방향)", g:"cnc"},
-            {t:"CNC선반", c:"G04", f:"휴지(Dwell)", g:"cnc"}, {t:"CNC선반", c:"G20", f:"인치(Inch) 단위 지정", g:"cnc"},
-            {t:"CNC선반", c:"G21", f:"미터(Metric, mm) 단위 지정", g:"cnc"}, {t:"CNC선반", c:"G27", f:"원점복귀 확인", g:"cnc"},
-            {t:"CNC선반", c:"G28", f:"자동 원점 복귀", g:"cnc"}, {t:"CNC선반", c:"G40", f:"공구 인선 반지름 보정 취소", g:"cnc"},
-            {t:"CNC선반", c:"G41", f:"공구 인선 반지름 보정 좌측", g:"cnc"}, {t:"CNC선반", c:"G42", f:"공구 인선 반지름 보정 우측", g:"cnc"},
-            {t:"CNC선반", c:"G50", f:"공작물 좌표계 설정 / 주축 최고 회전수", g:"cnc"}, {t:"CNC선반", c:"G70", f:"다듬(정삭) 절삭 사이클", g:"cnc"},
-            {t:"CNC선반", c:"G71", f:"안·바깥지름 거친(황삭) 절삭 사이클", g:"cnc"}, {t:"CNC선반", c:"G96", f:"절삭속도(m/min) 일정제어", g:"cnc"},
-            {t:"CNC선반", c:"G97", f:"주축 회전수(rpm) 일정제어", g:"cnc"}, {t:"CNC선반", c:"G98", f:"분당 이송 지정(mm/min)", g:"cnc"},
-            {t:"CNC선반", c:"G99", f:"회전당 이송 지정(mm/rev)", g:"cnc"},
-            // MCT (PPT "머시닝 센터" 파트 기준)
-            {t:"MCT", c:"G00", f:"급속 위치결정", g:"mc"}, {t:"MCT", c:"G01", f:"직선보간(절삭)", g:"mc"},
-            {t:"MCT", c:"G02", f:"원호보간(시계방향)", g:"mc"}, {t:"MCT", c:"G03", f:"원호보간(반시계방향)", g:"mc"},
-            {t:"MCT", c:"G04", f:"휴지(Dwell)", g:"mc"}, {t:"MCT", c:"G17", f:"XY 평면 지정", g:"mc"},
-            {t:"MCT", c:"G18", f:"ZX 평면 지정", g:"mc"}, {t:"MCT", c:"G19", f:"YZ 평면 지정", g:"mc"},
-            {t:"MCT", c:"G40", f:"공구경 보정 취소", g:"mc"}, {t:"MCT", c:"G41", f:"공구경 보정 좌측", g:"mc"},
-            {t:"MCT", c:"G42", f:"공구경 보정 우측", g:"mc"}, {t:"MCT", c:"G43", f:"공구길이 보정 +", g:"mc"},
-            {t:"MCT", c:"G44", f:"공구길이 보정 -", g:"mc"}, {t:"MCT", c:"G49", f:"공구길이 보정 취소", g:"mc"},
-            {t:"MCT", c:"G54", f:"공작물 좌표계 1번 선택", g:"mc"}, {t:"MCT", c:"G90", f:"절대지령", g:"mc"},
-            {t:"MCT", c:"G91", f:"증분지령", g:"mc"}, {t:"MCT", c:"G96", f:"주축 속도 일정제어", g:"mc"},
-            {t:"MCT", c:"G97", f:"주축 회전수 일정제어", g:"mc"},
-            // M코드 (PPT "M 코드" 파트 기준)
-            {t:"M-코드", c:"M00", f:"프로그램 정지", g:"m"}, {t:"M-코드", c:"M01", f:"선택 프로그램 정지(조건부)", g:"m"},
-            {t:"M-코드", c:"M02", f:"프로그램 끝", g:"m"}, {t:"M-코드", c:"M03", f:"주축 정회전", g:"m"},
-            {t:"M-코드", c:"M04", f:"주축 역회전", g:"m"}, {t:"M-코드", c:"M05", f:"주축 정지", g:"m"},
-            {t:"M-코드", c:"M06", f:"공구 교환", g:"m"}, {t:"M-코드", c:"M08", f:"절삭유 ON", g:"m"},
-            {t:"M-코드", c:"M09", f:"절삭유 OFF", g:"m"}, {t:"M-코드", c:"M30", f:"프로그램 종료 후 선두 복귀(리와인드)", g:"m"},
-            {t:"M-코드", c:"M98", f:"보조프로그램 호출", g:"m"}, {t:"M-코드", c:"M99", f:"보조프로그램 종료", g:"m"}
-        ];
+            // 선반·머시닝센터 공통 G코드
+            [COM,"G00","급속 위치 결정(급속 이송)"], [COM,"G01","직선 보간(절삭 이송)"],
+            [COM,"G02","원호 보간(시계 방향, CW)"], [COM,"G03","원호 보간(반시계 방향, CCW)"],
+            [COM,"G04","휴지(Dwell, 일시 정지)"], [COM,"G20","인치(inch) 단위 입력"],
+            [COM,"G21","미터(mm) 단위 입력"], [COM,"G27","원점 복귀 확인"],
+            [COM,"G28","자동 원점(기계 원점) 복귀"], [COM,"G30","제2·3·4 원점 복귀"],
+            // CNC 선반
+            [CNC,"G32","나사 절삭(한 블록씩 지령)"], [CNC,"G40","공구 인선 반지름 보정 취소"],
+            [CNC,"G41","공구 인선 반지름 보정 좌측"], [CNC,"G42","공구 인선 반지름 보정 우측"],
+            [CNC,"G50","공작물 좌표계 설정 / 주축 최고 회전수 지정"], [CNC,"G70","다듬(정삭) 절삭 사이클"],
+            [CNC,"G71","안·바깥지름 거친(황삭) 절삭 사이클"], [CNC,"G72","단면 거친(황삭) 절삭 사이클"],
+            [CNC,"G73","형상 반복(모방) 절삭 사이클"], [CNC,"G74","단면 홈 가공 / Z 방향 드릴링 사이클"],
+            [CNC,"G75","X 방향(안·바깥지름) 홈 가공 사이클"], [CNC,"G76","복합형 자동 나사 절삭 사이클"],
+            [CNC,"G90","안·바깥지름 절삭 단일형 고정 사이클"], [CNC,"G92","나사 절삭 단일형 고정 사이클"],
+            [CNC,"G94","단면 절삭 단일형 고정 사이클"], [CNC,"G96","절삭 속도(m/min) 일정 제어"],
+            [CNC,"G97","주축 회전수(rpm) 일정 제어"], [CNC,"G98","분당 이송 지정(mm/min)"],
+            [CNC,"G99","회전당 이송 지정(mm/rev)"],
+            // 머시닝센터
+            [MCT,"G17","X-Y 평면 지정"], [MCT,"G18","Z-X 평면 지정"], [MCT,"G19","Y-Z 평면 지정"],
+            [MCT,"G40","공구 지름 보정 취소"], [MCT,"G41","공구 지름 보정 좌측"], [MCT,"G42","공구 지름 보정 우측"],
+            [MCT,"G43","공구 길이 보정 + 방향"], [MCT,"G44","공구 길이 보정 - 방향"], [MCT,"G49","공구 길이 보정 취소"],
+            [MCT,"G54","공작물 좌표계 1번 선택"], [MCT,"G73","고속 심공(펙) 드릴링 사이클"], [MCT,"G74","역태핑 사이클(왼나사)"],
+            [MCT,"G76","정밀 보링 사이클"], [MCT,"G80","고정 사이클 취소"], [MCT,"G81","드릴링(스폿 드릴) 사이클"],
+            [MCT,"G82","카운터 보링 사이클(구멍 바닥에서 휴지)"], [MCT,"G83","심공(펙) 드릴링 사이클"], [MCT,"G84","태핑 사이클(오른나사)"],
+            [MCT,"G85","보링 사이클"], [MCT,"G90","절대 지령"], [MCT,"G91","증분(상대) 지령"],
+            [MCT,"G94","분당 이송(mm/min)"], [MCT,"G95","회전당 이송(mm/rev)"],
+            [MCT,"G98","고정 사이클 초기점 복귀"], [MCT,"G99","고정 사이클 R점 복귀"],
+            // M코드
+            [MC,"M00","프로그램 정지"], [MC,"M01","선택적 프로그램 정지(옵셔널 스톱)"], [MC,"M02","프로그램 끝"],
+            [MC,"M03","주축 정회전(CW)"], [MC,"M04","주축 역회전(CCW)"], [MC,"M05","주축 정지"],
+            [MC,"M06","공구 교환"], [MC,"M08","절삭유 ON"], [MC,"M09","절삭유 OFF"],
+            [MC,"M19","주축 한 방향 정지(오리엔테이션)"], [MC,"M30","프로그램 끝 후 처음으로 되감기(리와인드)"],
+            [MC,"M98","보조 프로그램 호출"], [MC,"M99","보조 프로그램 끝(주 프로그램으로 복귀)"]
+        ].map(([k, c, f]) => ({t: k.t, g: k.g, c, f}));
 
+        const Q_COUNT = 10, PASS = 90, LOCK_MIN = 5;
+        const LOCK_KEY = 'gm_lock_v2', REVIEW_KEY = 'gm_review_v2';
         let selected = [];
+
+        // G1 = G01, g01 = G01 처럼 앞자리 0과 대소문자는 따지지 않는다
+        function norm(s) {
+            const m = String(s).trim().toUpperCase().replace(/\s+/g, '').match(/^([GM])0*(\d+)$/);
+            return m ? m[1] + Number(m[2]) : '#' + s;
+        }
+        function esc(s) { return String(s).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
+        function show(id) {
+            ['main-content','pass-screen','review-screen','lock-screen'].forEach(x => document.getElementById(x).style.display = (x === id ? 'block' : 'none'));
+        }
+        function store(key, val) { try { val === null ? localStorage.removeItem(key) : localStorage.setItem(key, val); } catch (e) {} }
+        function load(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
 
         function startTimer(seconds) {
             const timerDisplay = document.getElementById('timer');
             const reattemptBtn = document.getElementById('reattemptBtn');
-            const interval = setInterval(() => {
-                const mins = Math.floor(seconds / 60);
-                const secs = seconds % 60;
-                timerDisplay.innerText = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+            const tick = () => {
+                const s = Math.max(0, seconds);
+                timerDisplay.innerText = `${Math.floor(s / 60)}:${s % 60 < 10 ? '0' : ''}${s % 60}`;
                 if (--seconds < 0) {
                     clearInterval(interval);
-                    localStorage.removeItem('cnc_final_lock');
-                    timerDisplay.innerText = '00:00';
+                    store(LOCK_KEY, null);
                     reattemptBtn.disabled = false;
                     reattemptBtn.style.background = '#28a745';
                     reattemptBtn.style.color = '#fff';
                 }
-            }, 1000);
+            };
+            const interval = setInterval(tick, 1000);
+            tick();
+        }
+
+        function showLock(unlockAt) {
+            show('lock-screen');
+            startTimer(Math.ceil((unlockAt - Date.now()) / 1000));
+        }
+
+        // 불합격: 틀린 문제의 정답을 모두 바르게 적어야 5분 차단이 시작된다
+        function showReview(review) {
+            show('review-screen');
+            document.getElementById('fail-score').innerText = `점수: ${review.score}점 (합격 ${PASS}점)`;
+            let html = "";
+            review.wrong.forEach((item, i) => {
+                html += `<div class="q-card">
+                            <span class="q-tag tag-${item.g}">${esc(item.t)}</span>
+                            <div class="q-text">${esc(item.f)}</div>
+                            <div class="ans-view" style="display:block">정답: ${esc(item.c)} <span class="mine">(내 답: ${esc(item.mine || '빈칸')})</span></div>
+                            <input type="text" class="fixInput" autocomplete="off" inputmode="text" placeholder="정답을 적으세요">
+                        </div>`;
+            });
+            document.getElementById('review-area').innerHTML = html;
+            const inputs = document.querySelectorAll('.fixInput');
+            const fixBtn = document.getElementById('fixBtn');
+            const check = () => {
+                let all = true;
+                inputs.forEach((inp, i) => {
+                    const ok = norm(inp.value) === norm(review.wrong[i].c);
+                    inp.classList.toggle('ok', ok);
+                    if (!ok) all = false;
+                });
+                fixBtn.disabled = !all;
+            };
+            inputs.forEach(inp => inp.addEventListener('input', check));
+            fixBtn.onclick = function() {
+                check();
+                if (fixBtn.disabled) return;
+                const unlockAt = Date.now() + LOCK_MIN * 60 * 1000;
+                store(REVIEW_KEY, null);
+                store(LOCK_KEY, String(unlockAt));
+                showLock(unlockAt);
+            };
         }
 
         function hidePassScreen() {
-            document.getElementById('pass-screen').style.display = 'none';
-            document.getElementById('main-content').style.display = 'block';
+            show('main-content');
             document.getElementById('checkBtn').style.display = 'none';
             document.getElementById('retryBtn').style.display = 'block';
         }
 
-        window.onload = function() {
-            const unlockTime = localStorage.getItem('cnc_final_lock');
-            if (unlockTime && Date.now() < parseInt(unlockTime)) {
-                document.getElementById('main-content').style.display = 'none';
-                document.getElementById('lock-screen').style.display = 'block';
-                startTimer(Math.ceil((parseInt(unlockTime) - Date.now()) / 1000));
-                return;
-            }
+        function shuffle(a) {
+            for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+            return a;
+        }
 
-            selected = fullDb.sort(() => Math.random() - 0.5).slice(0, 10);
+        window.onload = function() {
+            // 정답 적기를 끝내지 않고 새로고침하면 다시 정답 적기 화면으로
+            const pending = load(REVIEW_KEY);
+            if (pending) {
+                try { showReview(JSON.parse(pending)); return; } catch (e) { store(REVIEW_KEY, null); }
+            }
+            const unlockTime = parseInt(load(LOCK_KEY));
+            if (unlockTime && Date.now() < unlockTime) { showLock(unlockTime); return; }
+
+            selected = shuffle(fullDb.slice()).slice(0, Q_COUNT);
             let html = "";
             selected.forEach((item, i) => {
                 html += `<div class="q-card">
-                            <span class="q-tag tag-${item.g}">${item.t}</span>
-                            <div class="q-text">${item.f}</div>
+                            <span class="q-tag tag-${item.g}">${esc(item.t)}</span>
+                            <div class="q-text"><span class="num">${i + 1}.</span>${esc(item.f)}</div>
                             <input type="text" class="userInput" autocomplete="off" inputmode="text" placeholder="">
-                            <div class="ans-view" id="ans-${i}">정답: ${item.c}</div>
+                            <div class="ans-view" id="ans-${i}">정답: ${esc(item.c)}</div>
                         </div>`;
             });
             document.getElementById("quiz-area").innerHTML = html;
@@ -129,24 +212,27 @@
             document.getElementById('checkBtn').onclick = function() {
                 const inputs = document.querySelectorAll(".userInput");
                 const views = document.querySelectorAll(".ans-view");
-                let score = 0;
+                let right = 0;
+                const wrong = [];
                 inputs.forEach((input, i) => {
-                    if (input.value.trim().toUpperCase() === selected[i].c.toUpperCase()) {
-                        score++;
+                    if (norm(input.value) === norm(selected[i].c)) {
+                        right++;
                     } else {
                         views[i].style.display = "block";
+                        wrong.push({...selected[i], mine: input.value.trim().toUpperCase()});
                     }
                     input.disabled = true; // 제출 후 수정 불가
                 });
+                const score = Math.round(right * 100 / Q_COUNT);
 
-                if (score < 8) {
-                    localStorage.setItem('cnc_final_lock', (Date.now() + (10 * 60 * 1000)).toString());
-                    alert(`점수: ${score}/10점. 불합격! 10분간 차단됩니다.`);
-                    location.reload();
+                if (score < PASS) {
+                    const review = {score, wrong};
+                    store(REVIEW_KEY, JSON.stringify(review));
+                    window.scrollTo(0, 0);
+                    showReview(review);
                 } else {
-                    document.getElementById('main-content').style.display = 'none';
-                    document.getElementById('pass-screen').style.display = 'block';
-                    document.getElementById('pass-score').innerText = `최종 점수: ${score} / 10`;
+                    show('pass-screen');
+                    document.getElementById('pass-score').innerText = `최종 점수: ${score}점`;
                 }
             };
         };
