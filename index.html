@@ -28,7 +28,10 @@
         #lock-screen, #pass-screen { text-align: center; padding: 40px 20px; }
         #timer { font-size: 2.5rem; color: #d93025; font-weight: bold; margin: 20px 0; }
         .pass-msg { color: #28a745; font-size: 1.5rem; font-weight: bold; margin-bottom: 10px; }
-        .browser { text-align: center; font-size: 0.95rem; font-weight: bold; color: #333; background: #eef3ff; border-radius: 8px; padding: 8px; margin: 10px 0; }
+        input.name-input { text-transform: none; margin-top: 15px; font-weight: bold; text-align: center; }
+        .name-warn { display: none; color: #d93025; font-weight: bold; text-align: center; margin-top: 6px; font-size: 0.9rem; }
+        .record { font-size: 0.9rem; color: #666; margin-top: 4px; }
+        .browser {text-align: center; font-size: 0.95rem; font-weight: bold; color: #333; background: #eef3ff; border-radius: 8px; padding: 8px; margin: 10px 0; }
         .open-chrome { display: block; text-align: center; background: #007bff; color: #fff; padding: 15px; border-radius: 10px; font-weight: bold; text-decoration: none; margin-top: 15px; }
         .addr { display: block; text-align: center; font-size: 0.95rem; word-break: break-all; background: #f6f6f6; padding: 10px; border-radius: 8px; margin-top: 10px; user-select: all; }
         .fail-score { text-align: center; font-size: 1.2rem; font-weight: bold; color: #d93025; margin: 6px 0 4px; }
@@ -38,6 +41,8 @@
     <div id="main-content" class="box">
         <h2>코드 암기 테스트</h2>
         <p class="guide">기능을 보고 코드를 입력하세요. (예: G01, M03)<br>10문제 · 1문제 10점 · <b>90점 이상 합격</b></p>
+        <input type="text" id="nameInput" class="name-input" autocomplete="name" maxlength="20" placeholder="이름을 적으세요">
+        <div id="name-warn" class="name-warn">이름을 먼저 적으세요.</div>
         <div id="quiz-area"></div>
         <button class="btn-check" id="checkBtn">정답 제출</button>
         <button class="btn-retry" id="retryBtn" onclick="location.reload()">새로운 문제로 다시 도전</button>
@@ -47,6 +52,7 @@
         <div class="pass-msg">합격 (PASS)</div>
         <p id="pass-score" style="font-size: 1.2rem; font-weight: bold;"></p>
         <p class="browser" id="pass-browser"></p>
+        <p class="record" id="pass-record"></p>
         <p>잘했습니다!<br><span id="pass-detail"></span></p>
         <button onclick="hidePassScreen()" style="background:#007bff; color:#fff;">내 답안 확인하기</button>
     </div>
@@ -108,7 +114,19 @@
         ].map(([k, c, f]) => ({t: k.t, g: k.g, c, f}));
 
         const Q_COUNT = 10, PASS = 90, LOCK_MIN = 5;
-        const LOCK_KEY = 'gm_lock_v2', REVIEW_KEY = 'gm_review_v2', QUIZ_KEY = 'gm_quiz_v2';
+        const LOCK_KEY = 'gm_lock_v2', REVIEW_KEY = 'gm_review_v2', QUIZ_KEY = 'gm_quiz_v2', NAME_KEY = 'gm_name';
+
+        // 합격 기록을 보낼 구글 설문(사전 작성 링크에서 얻은 칸 번호). url이 비어 있으면 보내지 않는다.
+        const FORM = { url: '', name: '', score: '', browser: '' };
+        function sendRecord(name, score) {
+            if (!FORM.url) return Promise.resolve(null);
+            const body = new URLSearchParams();
+            body.append(FORM.name, name);
+            body.append(FORM.score, String(score));
+            body.append(FORM.browser, BROWSER_TEXT.replace('응시 브라우저: ', ''));
+            return fetch(FORM.url, {method: 'POST', mode: 'no-cors', body}).then(() => true, () => false);
+        }
+        function who(name) { return `${name} · ${BROWSER_TEXT}`; }
         let selected = [];
 
         // G1 = G01, g01 = G01 처럼 앞자리 0과 대소문자는 따지지 않는다. 내부 공백은 허용하지 않는다(G 01 = 오답).
@@ -197,7 +215,7 @@
         function showReview(review) {
             show('review-screen');
             document.getElementById('fail-score').innerText = `점수: ${review.score}점 (합격 ${PASS}점)`;
-            document.getElementById('fail-browser').innerText = BROWSER_TEXT;
+            document.getElementById('fail-browser').innerText = review.name ? who(review.name) : BROWSER_TEXT;
             let html = "";
             review.wrong.forEach((item, i) => {
                 html += `<div class="q-card">
@@ -283,12 +301,29 @@
             });
             document.getElementById("quiz-area").innerHTML = html;
 
+            // 이름은 한 번 적으면 이 브라우저가 기억했다가 다음 응시 때 미리 채운다
+            const nameInput = document.getElementById('nameInput');
+            nameInput.value = load(NAME_KEY) || '';
+            nameInput.addEventListener('input', () => {
+                store(NAME_KEY, nameInput.value.trim());
+                if (nameInput.value.trim()) document.getElementById('name-warn').style.display = 'none';
+            });
+
             document.getElementById('checkBtn').onclick = function() {
                 // 다른 탭에서 복습/차단 상태가 생겼으면 채점하지 않고 갱신
                 if (load(REVIEW_KEY) || (parseInt(load(LOCK_KEY)) && Date.now() < parseInt(load(LOCK_KEY)))) {
                     location.reload();
                     return;
                 }
+                const name = nameInput.value.trim().replace(/\s+/g, ' ');
+                if (!name) {
+                    document.getElementById('name-warn').style.display = 'block';
+                    window.scrollTo(0, 0);
+                    nameInput.focus();
+                    return;
+                }
+                nameInput.disabled = true;
+                store(NAME_KEY, name);
                 const inputs = document.querySelectorAll(".userInput");
                 const views = document.querySelectorAll(".ans-view");
                 let right = 0;
@@ -306,14 +341,20 @@
                 store(QUIZ_KEY, null); // 제출했으므로 다음 응시 때는 새 문제
 
                 if (score < PASS) {
-                    const review = {score, wrong};
+                    const review = {score, wrong, name};
                     store(REVIEW_KEY, JSON.stringify(review));
                     window.scrollTo(0, 0);
                     showReview(review);
                 } else {
                     show('pass-screen');
                     document.getElementById('pass-score').innerText = `최종 점수: ${score}점`;
-                    document.getElementById('pass-browser').innerText = BROWSER_TEXT;
+                    document.getElementById('pass-browser').innerText = who(name);
+                    const rec = document.getElementById('pass-record');
+                    if (FORM.url) rec.innerText = '합격 기록을 보내는 중...';
+                    sendRecord(name, score).then(ok => {
+                        if (ok === true) rec.innerText = '합격 기록 완료';
+                        else if (ok === false) rec.innerText = '합격 기록을 보내지 못했습니다. 이 화면을 캡처해 선생님께 보여 주세요.';
+                    });
                     document.getElementById('pass-detail').innerText =
                         wrong.length === 0 ? '모두 맞혔습니다.' : '아래에서 틀린 문제를 확인해 보세요.';
                 }
