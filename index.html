@@ -117,19 +117,19 @@
         const Q_COUNT = 10, PASS = 90, LOCK_MIN = 5;
         const LOCK_KEY = 'gm_lock_v2', REVIEW_KEY = 'gm_review_v2', QUIZ_KEY = 'gm_quiz_v2', NAME_KEY = 'gm_name';
 
-        // 응시 기록(합격·불합격)을 보낼 구글 설문(사전 작성 링크에서 얻은 칸 번호). url이 비어 있으면 보내지 않는다.
-        const FORM = { url: '', name: '', score: '', result: '', browser: '' };
+        // 응시 기록(합격·불합격)을 보낼 Supabase. 공개용 키(publishable/anon)만 넣는다. url이 비어 있으면 보내지 않는다.
+        // 이 키로는 기록 추가만 되고 읽기는 안 된다(supabase/setup.sql 참고).
+        const DB = { url: '', key: '' };
         function sendRecord(name, score) {
-            if (!FORM.url) return Promise.resolve(null);
-            const body = new URLSearchParams();
-            body.append(FORM.name, name);
-            body.append(FORM.score, String(score));
-            body.append(FORM.result, score >= PASS ? '합격' : '불합격');
-            body.append(FORM.browser, BROWSER_TEXT.replace('응시 브라우저: ', ''));
-            return fetch(FORM.url, {method: 'POST', mode: 'no-cors', body}).then(() => true, () => false);
+            if (!DB.url) return Promise.resolve(null);
+            const headers = {'Content-Type': 'application/json', 'apikey': DB.key, 'Prefer': 'return=minimal'};
+            if (DB.key.startsWith('eyJ')) headers['Authorization'] = 'Bearer ' + DB.key; // 예전 형식 anon 키
+            const body = JSON.stringify({name, score, passed: score >= PASS, browser: BROWSER_TEXT.replace('응시 브라우저: ', '').slice(0, 60)});
+            return fetch(DB.url.replace(/\/+$/, '') + '/rest/v1/gm_quiz_records', {method: 'POST', headers, body})
+                .then(r => r.ok, () => false);
         }
         function reportRecord(name, score, el) {
-            if (FORM.url) el.innerText = '응시 기록을 보내는 중...';
+            if (DB.url) el.innerText = '응시 기록을 보내는 중...';
             sendRecord(name, score).then(ok => {
                 if (ok === true) el.innerText = '응시 기록 완료';
                 else if (ok === false) el.innerText = '응시 기록을 보내지 못했습니다. 이 화면을 캡처해 선생님께 보여 주세요.';
