@@ -1,7 +1,8 @@
 /**
  * G·M코드 퀴즈 기록·판정 스크립트 (구글 시트 하나로 끝)
  *
- * 붙이는 곳: 새 구글 시트 > 확장 프로그램 > Apps Script (원래 있던 내용을 지우고 통째로 붙여 넣기)
+ * 붙이는 곳: 구글 시트 > 확장 프로그램 > Apps Script, 또는 Apps Script 사이트의 새 프로젝트
+ *          (Apps Script 사이트에서 만들면 설정하기가 'GM코드 퀴즈 기록' 시트를 새로 만들고, 실행 로그에 그 주소를 보여 준다)
  * 처음 한 번: 위 함수 목록에서 '설정하기'를 골라 실행(권한 허용) → 배포 > 새 배포 > 웹 앱
  *            (실행: 나, 액세스 권한: 모든 사용자) → 나온 웹 앱 주소를 퀴즈에 넣는다.
  *
@@ -30,8 +31,22 @@ const COLORS = { '합격': '#d9f2e3', '불합격': '#fde2e1', '미응시': '#eee
 
 /* ---------- 처음 설정 ---------- */
 
+// 기록할 시트: 설정하기 때 기억해 둔 시트. 시트에 붙인 스크립트면 그 시트,
+// Apps Script 사이트에서 따로 만든 스크립트면 'GM코드 퀴즈 기록' 시트를 새로 만든다.
+function ss_() {
+  const id = PropertiesService.getScriptProperties().getProperty('SHEET_ID');
+  if (id) return SpreadsheetApp.openById(id);
+  const active = SpreadsheetApp.getActive();
+  if (active) return active;
+  throw new Error('먼저 편집기에서 설정하기를 실행하세요.');
+}
+
 function 설정하기() {
-  const ss = SpreadsheetApp.getActive();
+  const props = PropertiesService.getScriptProperties();
+  const id = props.getProperty('SHEET_ID');
+  const ss = id ? SpreadsheetApp.openById(id) : (SpreadsheetApp.getActive() || SpreadsheetApp.create('GM코드 퀴즈 기록'));
+  props.setProperty('SHEET_ID', ss.getId());
+  Logger.log('기록 시트 주소: ' + ss.getUrl());
   recordSheet_(ss);
   if (!ss.getSheetByName(ROSTER_SHEET)) ss.insertSheet(ROSTER_SHEET).getRange(1, 1).setValue('이름').setFontWeight('bold');
   ScriptApp.getProjectTriggers()
@@ -71,7 +86,7 @@ function doPost(e) {
     const lock = LockService.getScriptLock();
     lock.waitLock(10000);
     try {
-      recordSheet_(SpreadsheetApp.getActive())
+      recordSheet_(ss_())
         .appendRow([new Date(), "'" + name, score, score >= PASS_SCORE ? '합격' : '불합격', browser]);
     } finally {
       lock.releaseLock();
@@ -135,7 +150,7 @@ function 판정하기(e) {
   const now = new Date();
   if (e && e.triggerUid && !isWeekday_(now)) return; // 자동 실행은 주말에 건너뜀
 
-  const ss = SpreadsheetApp.getActive();
+  const ss = ss_();
   const sh = recordSheet_(ss);
   const cutoff = latestCutoff_(now);
   const start = prevCutoff_(cutoff);

@@ -118,7 +118,7 @@
         const LOCK_KEY = 'gm_lock_v2', REVIEW_KEY = 'gm_review_v2', QUIZ_KEY = 'gm_quiz_v2', NAME_KEY = 'gm_name';
 
         // 응시 기록(합격·불합격)을 보낼 구글 시트 웹 앱 주소(apps-script/GM코드퀴즈.gs). 비어 있으면 보내지 않는다.
-        const SHEET_URL = '';
+        const SHEET_URL = 'https://script.google.com/macros/s/AKfycbxdJ1L8JFYYd8Nfvpo70dWSPZ0QidKdMcCGN6NY9xTPQbXPBh4hwZBIVBtXuHW2pLxl/exec';
         function sendRecord(name, score) {
             if (!SHEET_URL) return Promise.resolve(null);
             const body = JSON.stringify({name, score, browser: BROWSER_TEXT.replace('응시 브라우저: ', '').slice(0, 60)});
