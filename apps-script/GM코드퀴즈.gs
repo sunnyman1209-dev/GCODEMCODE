@@ -10,12 +10,12 @@
  *   1) 퀴즈가 제출마다 보내는 기록(이름, 점수, 브라우저)을 '응시 기록' 탭에 한 줄씩 쌓는다.
  *      시각과 합격 여부는 이 스크립트가 직접 정한다(학생이 조작할 수 없음).
  *   2) 평일 오전 9시마다 '전 평일 9시 ~ 오늘 9시' 기록만 보고 이름별 최종 결과
- *      (합격 / 불합격 / 미응시)를 판정한다. 그 기간에 한 번이라도 90점 이상이면 합격.
+ *      (합격 / 불합격)만 판정한다. 그 기간에 한 번이라도 90점 이상이면 합격, 아니면(미응시 포함) 불합격.
  *
  * 탭
  *   응시 기록   : 자동으로 쌓임(고치지 않는다)
  *   명단        : 선생님이 A열에 학생 이름을 한 줄에 한 명씩 붙여 넣는다
- *   최근 판정   : 가장 최근 판정의 이름별 결과, 최고 점수, 응시 횟수
+ *   최근 판정   : 가장 최근 판정의 이름별 합격·불합격
  *   판정 기록   : 이름별로 날짜마다 결과를 한 칸씩 쌓은 표
  *   명단 외 이름: 명단에 없는 이름으로 응시한 기록(오타, 장난 이름 확인용)
  */
@@ -27,7 +27,7 @@ const TODAY_SHEET = '최근 판정';
 const LOG_SHEET = '판정 기록';
 const OTHER_SHEET = '명단 외 이름';
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
-const COLORS = { '합격': '#d9f2e3', '불합격': '#fde2e1', '미응시': '#eeeeee' };
+const COLORS = { '합격': '#d9f2e3', '불합격': '#fde2e1' };
 
 /* ---------- 처음 설정 ---------- */
 
@@ -184,23 +184,23 @@ function 판정하기(e) {
   const others = Object.keys(stats).filter(k => !rosterKeys[k]).map(k => stats[k]);
   if (roster.length === 0) roster = others.map(s => s.name); // 명단이 비었으면 응시자만 판정
 
+  // 최종 결과는 합격·불합격 둘 중 하나. 기간 안에 응시하지 않았으면 불합격.
   const result = n => {
     const s = stats[norm_(n)];
-    if (!s) return { r: '미응시', best: '', tries: 0 };
-    return { r: s.passed ? '합격' : '불합격', best: s.best, tries: s.tries };
+    return { r: s && s.passed ? '합격' : '불합격' };
   };
   const period = '판정 기간: ' + label_(start) + ' 9:00 ~ ' + label_(cutoff) + ' 9:00';
 
   // 최근 판정
   const today = ss.getSheetByName(TODAY_SHEET) || ss.insertSheet(TODAY_SHEET);
   today.clear();
-  const rows = roster.map(n => { const x = result(n); return [safe_(n), x.r, x.best, x.tries]; });
+  const rows = roster.map(n => [safe_(n), result(n).r]);
   const count = r => rows.filter(x => x[1] === r).length;
   today.getRange(1, 1).setValue(period).setFontWeight('bold');
-  today.getRange(2, 1).setValue('합격 ' + count('합격') + '명 · 불합격 ' + count('불합격') + '명 · 미응시 ' + count('미응시') + '명');
-  today.getRange(4, 1, 1, 4).setValues([['이름', '결과', '최고 점수', '응시 횟수']]).setFontWeight('bold');
+  today.getRange(2, 1).setValue('합격 ' + count('합격') + '명 · 불합격 ' + count('불합격') + '명');
+  today.getRange(4, 1, 1, 2).setValues([['이름', '결과']]).setFontWeight('bold');
   if (rows.length) {
-    today.getRange(5, 1, rows.length, 4).setValues(rows);
+    today.getRange(5, 1, rows.length, 2).setValues(rows);
     today.getRange(5, 2, rows.length, 1).setBackgrounds(rows.map(x => [COLORS[x[1]]]));
   }
 
@@ -230,9 +230,9 @@ function 판정하기(e) {
   const other = ss.getSheetByName(OTHER_SHEET) || ss.insertSheet(OTHER_SHEET);
   other.clear();
   other.getRange(1, 1).setValue(period + ' (명단에 없는 이름으로 응시한 기록)').setFontWeight('bold');
-  other.getRange(3, 1, 1, 4).setValues([['적은 이름', '결과', '최고 점수', '응시 횟수']]).setFontWeight('bold');
-  const orows = others.map(s => [safe_(s.name), s.passed ? '합격' : '불합격', s.best, s.tries]);
-  if (orows.length) other.getRange(4, 1, orows.length, 4).setValues(orows);
+  other.getRange(3, 1, 1, 2).setValues([['적은 이름', '결과']]).setFontWeight('bold');
+  const orows = others.map(s => [safe_(s.name), s.passed ? '합격' : '불합격']);
+  if (orows.length) other.getRange(4, 1, orows.length, 2).setValues(orows);
 
   toast_(ss, period + ' 판정을 마쳤습니다.');
 }
