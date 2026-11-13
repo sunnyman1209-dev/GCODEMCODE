@@ -8,8 +8,8 @@
  *   A 이름      : 선생님이 2행부터 학생 이름을 한 줄에 한 명씩 넣는다
  *   B 최종 결과 : 평일 오전 9시에 확정된 결과(합격/불합격). 아침에 이 칸만 보면 된다
  *   C 진행 중   : 지난 9시 이후 응시 결과. 응시할 때마다 바로 바뀐다
- *                 (한 번이라도 90점 이상이면 합격, 응시했지만 못 넘으면 불합격)
- * 평일 9시가 지나면 C를 B로 옮기고 C를 비운다. 그 기간에 응시하지 않았으면 불합격.
+ *                 (한 번이라도 90점 이상이면 합격, 응시했지만 못 넘으면 불합격, 괄호 안은 그 기간 최고 점수)
+ * 평일 9시가 지나면 C를 B로 옮기고 C를 비운다(B는 매번 덮어씀). 그 기간에 응시하지 않았으면 불합격 (미응시).
  * 주말에는 넘기지 않으므로 월요일 9시 결과는 '금요일 9시 ~ 월요일 9시' 기준이다.
  *
  * '명단 외 이름' 탭: 명단에 없는 이름(오타, 장난 이름)으로 응시한 경우를 같은 방식으로 보여 준다.
@@ -120,7 +120,7 @@ function doPost(e) {
     try {
       const ss = ss_();
       closeIfDue_(ss); // 9시가 지났는데 아직 넘기지 않았으면 먼저 넘기고 기록한다
-      mark_(ss, name, score >= PASS_SCORE);
+      mark_(ss, name, score);
     } finally {
       lock.releaseLock();
     }
@@ -134,8 +134,15 @@ function doGet() {
   return ContentService.createTextOutput('GM코드 퀴즈 기록 서버가 동작 중입니다.');
 }
 
-// 학생 줄의 '진행 중' 칸을 바꾼다. 한 번 합격하면 그 기간에는 합격으로 남는다.
-function mark_(ss, name, passed) {
+// 칸 글자 '합격 (100)'에서 결과와 점수를 읽는다
+function parse_(v) {
+  const m = String(v).match(/^(합격|불합격)(?:\s*\((\d+)\))?/);
+  return m ? { passed: m[1] === '합격', best: m[2] ? Number(m[2]) : -1 } : null;
+}
+function color_(v) { return String(v).indexOf('불합격') === 0 ? COLORS['불합격'] : String(v).indexOf('합격') === 0 ? COLORS['합격'] : null; }
+
+// 학생 줄의 '진행 중' 칸을 바꾼다. 한 번 합격하면 그 기간에는 합격으로 남고, 점수는 그 기간 최고 점수.
+function mark_(ss, name, score) {
   const key = norm_(name);
   const ro = sheet_(ss, ROSTER_SHEET);
   let sh = ro, row = findRow_(ro, key);
@@ -148,9 +155,10 @@ function mark_(ss, name, passed) {
     }
   }
   const cell = sh.getRange(row, 3);
-  const now = String(cell.getValue());
-  const v = passed || now === '합격' ? '합격' : '불합격';
-  cell.setValue(v).setBackground(COLORS[v]);
+  const prev = parse_(cell.getValue()) || { passed: false, best: -1 };
+  const best = Math.max(prev.best, score);
+  const v = (prev.passed || best >= PASS_SCORE ? '합격' : '불합격') + ' (' + best + ')';
+  cell.setValue(v).setBackground(color_(v));
 }
 
 function findRow_(sh, key) {
@@ -190,9 +198,9 @@ function closeIfDue_(ss) {
   const n = ro.getLastRow();
   if (n >= 2) {
     const vals = ro.getRange(2, 1, n - 1, 3).getValues();
-    const out = vals.map(r => (String(r[0]).trim() ? [String(r[2]) === '합격' ? '합격' : '불합격', ''] : ['', '']));
+    const out = vals.map(r => (String(r[0]).trim() ? [String(r[2]) || '불합격 (미응시)', ''] : ['', '']));
     ro.getRange(2, 2, out.length, 2).setValues(out);
-    ro.getRange(2, 2, out.length, 2).setBackgrounds(out.map(r => [COLORS[r[0]], null]));
+    ro.getRange(2, 2, out.length, 2).setBackgrounds(out.map(r => [color_(r[0]), null]));
   }
 
   // 명단 외 이름: 이번 기간에 응시한 이름만 남긴다
@@ -202,11 +210,11 @@ function closeIfDue_(ss) {
   if (m >= 2) {
     const keep = ot.getRange(2, 1, m - 1, 3).getValues()
       .filter(r => String(r[0]).trim() && String(r[2]))
-      .map(r => [safe_(String(r[0]).replace(/^'/, '')), String(r[2]) === '합격' ? '합격' : '불합격', '']);
+      .map(r => [safe_(String(r[0]).replace(/^'/, '')), String(r[2]), '']);
     ot.getRange(2, 1, m - 1, 3).clearContent().setBackground(null);
     if (keep.length) {
       ot.getRange(2, 1, keep.length, 3).setValues(keep);
-      ot.getRange(2, 2, keep.length, 1).setBackgrounds(keep.map(r => [COLORS[r[1]]]));
+      ot.getRange(2, 2, keep.length, 1).setBackgrounds(keep.map(r => [color_(r[1])]));
     }
   }
 
