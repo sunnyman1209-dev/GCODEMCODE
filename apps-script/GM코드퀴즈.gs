@@ -41,6 +41,12 @@ function ss_() {
   throw new Error('먼저 편집기에서 설정하기를 실행하세요.');
 }
 
+// 알림: 시트를 열어 둔 상태가 아니면 띄울 수 없으므로 실행 로그에만 남긴다
+function toast_(ss, msg) {
+  Logger.log(msg);
+  try { ss.toast(msg); } catch (e) {}
+}
+
 function 설정하기() {
   const props = PropertiesService.getScriptProperties();
   const id = props.getProperty('SHEET_ID');
@@ -53,7 +59,7 @@ function 설정하기() {
     .filter(t => t.getHandlerFunction() === '판정하기')
     .forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('판정하기').timeBased().everyDays(1).atHour(9).create(); // 매일 9~10시 사이 실행, 주말은 건너뜀
-  ss.toast('설정 완료: 명단 탭에 이름을 넣고, 웹 앱으로 배포하세요.');
+  toast_(ss, '설정 완료: 명단 탭에 이름을 넣고, 웹 앱으로 배포하세요.');
 }
 
 function onOpen() {
@@ -228,5 +234,5 @@ function 판정하기(e) {
   const orows = others.map(s => [safe_(s.name), s.passed ? '합격' : '불합격', s.best, s.tries]);
   if (orows.length) other.getRange(4, 1, orows.length, 4).setValues(orows);
 
-  ss.toast(period + ' 판정을 마쳤습니다.');
+  toast_(ss, period + ' 판정을 마쳤습니다.');
 }
